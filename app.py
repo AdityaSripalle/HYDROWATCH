@@ -38,19 +38,19 @@ def load_data(uploaded_file):
         return df_cleaned, features, target, label_encoder
     return None, None, None, None
 
-# Train multiple models with overfitting prevention
-def train_models(X_train, y_train):
-    """Trains multiple models and selects the best one based on accuracy using cross-validation."""
+# Train multiple models with cross-validation accuracy
+def train_models(X_train, y_train, X_test, y_test):
+    """Trains multiple models and selects the best one based on cross-validation accuracy."""
     models = {
         "Random Forest": RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=20,
                                                 min_samples_leaf=10, max_features='sqrt', random_state=42),
-        "SVM": SVC(kernel='rbf', C=1.0, probability=True, random_state=42),  # ✅ Adjusted margin control
+        "SVM": SVC(kernel='rbf', C=1.0, probability=True, random_state=42),
         "Decision Tree": DecisionTreeClassifier(max_depth=10, min_samples_split=10, 
-                                                min_samples_leaf=5, random_state=42),  # ✅ Fixed underfitting
-        "Naïve Bayes": GaussianNB(var_smoothing=1e-9),  # ✅ Smoothed probabilities for stability
+                                                min_samples_leaf=5, random_state=42),
+        "Naïve Bayes": GaussianNB(var_smoothing=1e-9),
         "Logistic Regression": LogisticRegression(max_iter=500, solver='lbfgs', random_state=42),
         "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, learning_rate='optimal', random_state=42),
-        "KNN": KNeighborsClassifier(n_neighbors=7, weights='distance')  # ✅ Increased neighbors for better generalization
+        "KNN": KNeighborsClassifier(n_neighbors=7, weights='distance')
     }
 
     best_model = None
@@ -62,20 +62,21 @@ def train_models(X_train, y_train):
     kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
     for name, model in models.items():
-        train_acc = np.mean(cross_val_score(model, X_train, y_train, cv=kfold, scoring='accuracy'))  # ✅ Evaluating only on train data
-
+        # Cross-validation accuracy on train data
+        cv_accuracy = np.mean(cross_val_score(model, X_train, y_train, cv=kfold, scoring='accuracy'))
+        
         model.fit(X_train, y_train)  # Train final model
         y_pred = model.predict(X_test)
-        test_acc = accuracy_score(y_test, y_pred)  # ✅ Used actual test set accuracy
+        test_acc = accuracy_score(y_test, y_pred)  # Actual test accuracy
 
-        results.append([name, round(train_acc, 4), round(test_acc, 4)])
+        results.append([name, round(cv_accuracy, 4), round(test_acc, 4)])
 
         if test_acc > best_accuracy:
             best_accuracy = test_acc
             best_model = model
             best_model_name = name
 
-    results_df = pd.DataFrame(results, columns=["Model", "Training Accuracy", "Testing Accuracy"])
+    results_df = pd.DataFrame(results, columns=["Model", "Cross-Validation Accuracy", "Testing Accuracy"])
     return best_model, best_model_name, results_df
 
 if uploaded_file:
@@ -95,11 +96,11 @@ if uploaded_file:
         smote = SMOTE(random_state=42)
         X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
 
-        # ** 70-30 Split (Fixed Overfitting & Underfitting Issue) **
+        # ** 70-30 Split (Balanced Data) **
         X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
 
         # Train models and get the best one
-        best_model, best_model_name, results_df = train_models(X_train, y_train)
+        best_model, best_model_name, results_df = train_models(X_train, y_train, X_test, y_test)
 
         # Display Model Performance
         st.write("### 🔥 Model Performance")
