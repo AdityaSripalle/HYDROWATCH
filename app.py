@@ -91,7 +91,7 @@ if uploaded_file:
         smote = SMOTE(random_state=42)
         X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
 
-        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
 
         # Train models and get the best one
         best_model, best_model_name, results_df = train_models(X_train, y_train, X_test, y_test)
