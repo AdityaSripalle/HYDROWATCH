@@ -13,11 +13,11 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
 
-# Streamlit app title
+# Streamlit App Title
 st.title("💧 Water Quality Classification (Optimized)")
 
 # File uploader
-uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
+uploaded_file = st.file_uploader("📂 Upload CSV file", type=["csv"])
 
 @st.cache_data
 def load_data(uploaded_file):
@@ -108,11 +108,14 @@ if uploaded_file:
         joblib.dump(scaler, "scaler.pkl")
         joblib.dump(label_encoder, "label_encoder.pkl")
 
-        # Prediction Form
+        # --- Prediction Form ---
         st.write("### 🔮 Predict Water Quality")
-        user_inputs = [st.number_input(f"{feature}", value=0.0) for feature in features]
 
-        if st.button("Predict"):
+        with st.form(key="input_form"):
+            user_inputs = [st.number_input(f"{feature}", value=0.0) for feature in features]
+            submit_button = st.form_submit_button("Predict")
+
+        if submit_button:
             input_scaled = scaler.transform([user_inputs])
             prediction = best_model.predict(input_scaled)
             predicted_label = label_encoder.inverse_transform(prediction)[0]
