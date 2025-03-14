@@ -45,12 +45,11 @@ def train_models(X_train, y_train, X_test, y_test):
         "Random Forest": RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=20,
                                                 min_samples_leaf=10, max_features='sqrt', random_state=42),
         "SVM": SVC(kernel='rbf', C=1.0, probability=True, random_state=42),
-        "Decision Tree": DecisionTreeClassifier(max_depth=10, min_samples_split=10, 
-                                                min_samples_leaf=5, random_state=42),
-        "Naïve Bayes": GaussianNB(var_smoothing=1e-9),
-        "Logistic Regression": LogisticRegression(max_iter=500, solver='lbfgs', random_state=42),
+        'Decision Tree': DecisionTreeClassifier(criterion='gini', random_state=42),
+        "Gaussian Naive Bayes": GaussianNB(),
+        "Logistic Regression - Sklearn": SklearnLR(max_iter=1000),  # Sklearn Logistic Regression
         "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, learning_rate='optimal', random_state=42),
-        "KNN": KNeighborsClassifier(n_neighbors=7, weights='distance')
+         'K-Nearest Neighbors': KNeighborsClassifier(n_neighbors=5, p=2, metric='minkowski')
     }
 
     best_model = None
