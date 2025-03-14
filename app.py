@@ -24,7 +24,7 @@ def load_data(uploaded_file):
     """Loads and processes the dataset."""
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
-        features = ['pH', 'EC', 'CO3', 'HCO3', 'Cl', 'SO4', 'NO3', 'TH', 'Ca', 'Mg', 'Na', 'K', 'F', 'TDS']
+        features = ['pH', 'EC', 'CO3', 'HCO3', 'Cl', 'SO4', 'NO3', 'TH', 'Ca', 'Mg', 'Na', 'K', 'F', 'TDS', 'WQI']
         target = 'Water Quality Classification'
 
         if target not in df.columns:
@@ -119,4 +119,14 @@ if uploaded_file:
             input_scaled = scaler.transform([user_inputs])
             prediction = best_model.predict(input_scaled)
             predicted_label = label_encoder.inverse_transform(prediction)[0]
-            st.success(f"Predicted Water Quality: {predicted_label}")
+
+            # Map prediction to readable categories
+            prediction_mapping = {
+                "Drinking Water": "✅ Water is suitable for drinking",
+                "Irrigation Water": "🚜 Water is suitable for irrigation",
+                "Both Drinking & Irrigation": "🌿 Water is suitable for both drinking and irrigation",
+                "Harmful Water": "❌ Water is harmful to drink"
+            }
+
+            result_text = prediction_mapping.get(predicted_label, "⚠️ Unknown Classification")
+            st.success(f"🔍 **Prediction:** {result_text}")
