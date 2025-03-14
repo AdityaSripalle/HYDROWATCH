@@ -2,21 +2,19 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, AdaBoostClassifier, BaggingClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
-from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
-from sklearn.feature_selection import SelectKBest, f_classif
 
 # Streamlit app title
-st.title("💧 Water Quality Classification")
+st.title("💧 Water Quality Classification (Optimized)")
 
 # File uploader
 uploaded_file = st.file_uploader("Upload CSV file", type=["csv"])
@@ -36,12 +34,7 @@ def load_data(uploaded_file):
         df_cleaned = df[features + [target]].copy()
 
         # Handle missing values
-        numeric_features = df_cleaned.select_dtypes(include=[np.number]).columns
-        categorical_features = df_cleaned.select_dtypes(exclude=[np.number]).columns
-
-        df_cleaned[numeric_features] = df_cleaned[numeric_features].fillna(df_cleaned[numeric_features].median())
-        for feature in categorical_features:
-            df_cleaned[feature].fillna(df_cleaned[feature].mode()[0], inplace=True)
+        df_cleaned.fillna(df_cleaned.median(numeric_only=True), inplace=True)
 
         # Encode target labels
         label_encoder = LabelEncoder()
@@ -50,20 +43,16 @@ def load_data(uploaded_file):
         return df_cleaned, features, target, label_encoder
     return None, None, None, None
 
-# Train multiple models
+# Train models
 def train_models(X_train, y_train, X_test, y_test):
-    """Trains multiple ML models and returns the best model with results."""
+    """Trains selected ML models and returns the best model."""
     models = {
         "Random Forest": RandomForestClassifier(random_state=42),
         "SVM": SVC(kernel='rbf', random_state=42),
         "Decision Tree": DecisionTreeClassifier(random_state=42),
-        "Gradient Boosting": GradientBoostingClassifier(random_state=42),
         "Gaussian Naive Bayes": GaussianNB(),
         "Logistic Regression": LogisticRegression(max_iter=500, random_state=42),
-        "K-Nearest Neighbors": KNeighborsClassifier(),
-        "Quadratic Discriminant Analysis": QuadraticDiscriminantAnalysis(),
-        "Bagging": BaggingClassifier(random_state=42),
-        "AdaBoost": AdaBoostClassifier(random_state=42)
+        "KNN": KNeighborsClassifier()
     }
 
     results = []
@@ -73,31 +62,24 @@ def train_models(X_train, y_train, X_test, y_test):
 
     for name, model in models.items():
         model.fit(X_train, y_train)
-        train_acc = model.score(X_train, y_train)
-        test_acc = model.score(X_test, y_test)
-        cv_acc = np.mean(cross_val_score(model, X_train, y_train, cv=5))
+        train_acc = accuracy_score(y_train, model.predict(X_train))
+        test_acc = accuracy_score(y_test, model.predict(X_test))
 
-        results.append([name, cv_acc, train_acc, test_acc])
+        results.append([name, train_acc, test_acc])
 
         if test_acc > best_accuracy:
             best_accuracy = test_acc
             best_model = model
             best_model_name = name
 
-    results_df = pd.DataFrame(results, columns=["Model", "CV Accuracy", "Training Accuracy", "Testing Accuracy"])
+    results_df = pd.DataFrame(results, columns=["Model", "Training Accuracy", "Testing Accuracy"])
     return best_model, best_model_name, results_df
-
-# Predict water quality
-def predict_water_quality(model, scaler, label_encoder, input_data):
-    input_scaled = scaler.transform([input_data])
-    prediction = model.predict(input_scaled)
-    return label_encoder.inverse_transform(prediction)[0]
 
 if uploaded_file:
     df, features, target, label_encoder = load_data(uploaded_file)
     
     if df is not None:
-        st.write("### 📊 Preview of the Dataset")
+        st.write("### 📊 Dataset Preview")
         st.dataframe(df.head())
 
         # Data Preprocessing
@@ -110,11 +92,7 @@ if uploaded_file:
         smote = SMOTE(random_state=42)
         X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
 
-        # Feature selection
-        selector = SelectKBest(score_func=f_classif, k=10)
-        X_selected = selector.fit_transform(X_resampled, y_resampled)
-
-        X_train, X_test, y_train, y_test = train_test_split(X_selected, y_resampled, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
 
         # Train models
         best_model, best_model_name, results_df = train_models(X_train, y_train, X_test, y_test)
@@ -132,10 +110,10 @@ if uploaded_file:
 
         # Prediction Form
         st.write("### 🔮 Predict Water Quality")
-        user_inputs = []
-        for feature in features:
-            user_inputs.append(st.number_input(f"Enter {feature}", value=0.0))
+        user_inputs = [st.number_input(f"{feature}", value=0.0) for feature in features]
 
         if st.button("Predict"):
-            prediction = predict_water_quality(best_model, scaler, label_encoder, user_inputs)
-            st.success(f"Predicted Water Quality: {prediction}")
+            input_scaled = scaler.transform([user_inputs])
+            prediction = best_model.predict(input_scaled)
+            predicted_label = label_encoder.inverse_transform(prediction)[0]
+            st.success(f"Predicted Water Quality: {predicted_label}")
