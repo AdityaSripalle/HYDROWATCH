@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
@@ -39,11 +39,13 @@ def load_data(uploaded_file):
 
 # Train multiple models with overfitting prevention
 def train_models(X_train, y_train, X_test, y_test):
-    """Trains multiple models and selects the best one based on accuracy."""
+    """Trains multiple models and selects the best one based on accuracy using cross-validation."""
     models = {
-        "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=10, min_samples_split=5, min_samples_leaf=2, random_state=42),
+        "Random Forest": RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=10, 
+                                                min_samples_leaf=5, max_features='sqrt', random_state=42),
         "SVM": SVC(kernel='rbf', probability=True, random_state=42),
-        "Decision Tree": DecisionTreeClassifier(max_depth=10, min_samples_split=5, min_samples_leaf=2, random_state=42),
+        "Decision Tree": DecisionTreeClassifier(max_depth=10, min_samples_split=10, 
+                                                min_samples_leaf=5, random_state=42),
         "Naïve Bayes": GaussianNB(),
         "Logistic Regression": LogisticRegression(max_iter=500, random_state=42),
         "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, random_state=42)
@@ -55,12 +57,14 @@ def train_models(X_train, y_train, X_test, y_test):
 
     results = []
 
+    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
     for name, model in models.items():
         model.fit(X_train, y_train)
-        train_acc = accuracy_score(y_train, model.predict(X_train))
-        test_acc = accuracy_score(y_test, model.predict(X_test))
+        train_acc = np.mean(cross_val_score(model, X_train, y_train, cv=kfold, scoring='accuracy'))
+        test_acc = np.mean(cross_val_score(model, X_test, y_test, cv=kfold, scoring='accuracy'))
 
-        results.append([name, train_acc, test_acc])
+        results.append([name, round(train_acc, 4), round(test_acc, 4)])
 
         if test_acc > best_accuracy:
             best_accuracy = test_acc
