@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
+import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoostClassifier, GradientBoostingClassifier
@@ -10,8 +11,7 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, precision_score, f1_score, r2_score, mean_absolute_error
-import matplotlib.pyplot as plt
+from sklearn.metrics import accuracy_score, precision_score, f1_score
 from imblearn.over_sampling import SMOTE
 
 # Title for the Streamlit app
@@ -49,8 +49,12 @@ def load_data(uploaded_file):
 X, y, df_cleaned, label_encoder = load_data(uploaded_file)
 
 if X is not None and y is not None:
+    # Handle class imbalance using SMOTE
+    smote = SMOTE(random_state=42)
+    X_resampled, y_resampled = smote.fit_resample(X, y)
+
     # Split the data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
 
     # Scale the data
     scaler = StandardScaler()
@@ -75,157 +79,76 @@ if X is not None and y is not None:
         cv_accuracies = {}
         precision_scores = {}
         f1_scores = {}
-        r2_scores = {}
-        mae_scores = {}
 
-        # Initialize Stratified K-Fold for better CV accuracy estimation
+        # Initialize Stratified K-Fold
         stratified_kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
         for name, model in models.items():
-            # Perform cross-validation to get more generalized accuracy
-            cv_score = cross_val_score(model, X_train, y_train, cv=stratified_kfold, scoring='accuracy')  # 5-fold CV
+            # Perform cross-validation
+            cv_score = cross_val_score(model, X_train, y_train, cv=stratified_kfold, scoring='accuracy')
             cv_accuracies[name] = cv_score.mean()
 
-            # Fit the model to the entire training data
+            # Train the model
             model.fit(X_train, y_train)
             y_pred = model.predict(X_test)
 
-            accuracies[name] = accuracy_score(y_test, y_pred)  # Testing accuracy
-
-            # Calculate additional metrics
+            # Compute performance metrics
+            accuracies[name] = accuracy_score(y_test, y_pred)
             precision_scores[name] = precision_score(y_test, y_pred, average='weighted', zero_division=0)
             f1_scores[name] = f1_score(y_test, y_pred, average='weighted')
-            r2_scores[name] = r2_score(y_test, y_pred)
-            mae_scores[name] = mean_absolute_error(y_test, y_pred)
 
-        # Ensuring cross-validation accuracy is less than or equal to testing accuracy
-        for name in accuracies:
-            if cv_accuracies[name] > accuracies[name]:
-                # Adjusting cross-validation accuracy if it is higher than testing accuracy
-                cv_accuracies[name] = accuracies[name]  # Set CV accuracy equal to test accuracy
-
-        # Find the best model based on accuracy
+        # Find the best model based on testing accuracy
         best_model_name = max(accuracies, key=accuracies.get)
-        return models[best_model_name], best_model_name, accuracies, cv_accuracies, precision_scores, f1_scores, r2_scores, mae_scores
+        return models[best_model_name], best_model_name, accuracies, cv_accuracies, precision_scores, f1_scores
 
     # Train and evaluate models
-    best_model, best_model_name, accuracies, cv_accuracies, precision_scores, f1_scores, r2_scores, mae_scores = train_and_evaluate_models(X_train, y_train, X_test, y_test)
+    best_model, best_model_name, accuracies, cv_accuracies, precision_scores, f1_scores = train_and_evaluate_models(
+        X_train, y_train, X_test, y_test
+    )
 
-    # Display the comparison bar chart of model accuracies (Cross-validation vs Testing)
+    # Display the comparison bar chart of model accuracies
     st.title("Comparison of Model Accuracies")
 
     st.subheader("Comparison of Cross-Validation Accuracies")
-    # Create a bar graph comparing cross-validation accuracies
-    models = list(cv_accuracies.keys())
-    model_cv_accuracies = list(cv_accuracies.values())
-
-    plt.figure(figsize=(14, 8))
-    bars = plt.bar(models, model_cv_accuracies, color='skyblue')
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width() / 2, height + 0.02, f'{height*100:.2f}%', ha='center', va='bottom', fontsize=12, color='black')
-    plt.xlabel('Models', fontsize=14)
-    plt.ylabel('Cross-Validation Accuracy', fontsize=14)
-    plt.title('Comparison of Cross-Validation Accuracies', fontsize=16)
+    fig, ax = plt.subplots(figsize=(14, 8))
+    ax.bar(cv_accuracies.keys(), cv_accuracies.values(), color='skyblue')
+    ax.set_xlabel('Models', fontsize=14)
+    ax.set_ylabel('Cross-Validation Accuracy', fontsize=14)
+    ax.set_title('Comparison of Cross-Validation Accuracies', fontsize=16)
     plt.xticks(rotation=45, ha='right', fontsize=12)
-    plt.tight_layout(pad=4.0)
-    st.pyplot()
+    st.pyplot(fig)
 
     st.subheader("Comparison of Testing Accuracies")
-    # Create a bar graph comparing testing accuracies
-    model_accuracies = list(accuracies.values())
-
-    plt.figure(figsize=(14, 8))
-    bars = plt.bar(models, model_accuracies, color='lightgreen')
-    for bar in bars:
-        height = bar.get_height()
-        plt.text(bar.get_x() + bar.get_width() / 2, height + 0.02, f'{height*100:.2f}%', ha='center', va='bottom', fontsize=12, color='black')
-    plt.xlabel('Models', fontsize=14)
-    plt.ylabel('Testing Accuracy', fontsize=14)
-    plt.title('Comparison of Testing Accuracies', fontsize=16)
+    fig, ax = plt.subplots(figsize=(14, 8))
+    ax.bar(accuracies.keys(), accuracies.values(), color='lightgreen')
+    ax.set_xlabel('Models', fontsize=14)
+    ax.set_ylabel('Testing Accuracy', fontsize=14)
+    ax.set_title('Comparison of Testing Accuracies', fontsize=16)
     plt.xticks(rotation=45, ha='right', fontsize=12)
-    plt.tight_layout(pad=4.0)
-    st.pyplot()
+    st.pyplot(fig)
 
-    # Display Precision, F1 Score, R² Score, and MAE metrics comparison
+    # Display Precision and F1 Score metrics comparison
     st.title("Model Performance Metrics Comparison")
-    st.subheader("Comparison of Precision, F1 Score, R² Score, and MAE")
-
-    # Combine the metrics into a DataFrame for easy plotting
-    metrics = ['Precision', 'F1 Score', 'R² Score', 'MAE']
+    st.subheader("Comparison of Precision and F1 Score")
 
     metrics_df = pd.DataFrame({
-        'Random Forest': [
-            precision_scores['Random Forest'], f1_scores['Random Forest'], r2_scores['Random Forest'], mae_scores['Random Forest']],
-        'SVM': [
-            precision_scores['SVM'], f1_scores['SVM'], r2_scores['SVM'], mae_scores['SVM']],
-        'K-Nearest Neighbors': [
-            precision_scores['K-Nearest Neighbors'], f1_scores['K-Nearest Neighbors'], r2_scores['K-Nearest Neighbors'], mae_scores['K-Nearest Neighbors']],
-        'Decision Tree': [
-            precision_scores['Decision Tree'], f1_scores['Decision Tree'], r2_scores['Decision Tree'], mae_scores['Decision Tree']],
-        'Logistic Regression': [
-            precision_scores['Logistic Regression'], f1_scores['Logistic Regression'], r2_scores['Logistic Regression'], mae_scores['Logistic Regression']],
-        'Gaussian Naive Bayes': [
-            precision_scores['Gaussian Naive Bayes'], f1_scores['Gaussian Naive Bayes'], r2_scores['Gaussian Naive Bayes'], mae_scores['Gaussian Naive Bayes']],
-        'Bagging': [
-            precision_scores['Bagging'], f1_scores['Bagging'], r2_scores['Bagging'], mae_scores['Bagging']],
-        'AdaBoost': [
-            precision_scores['AdaBoost'], f1_scores['AdaBoost'], r2_scores['AdaBoost'], mae_scores['AdaBoost']],
-        'Gradient Boosting': [
-            precision_scores['Gradient Boosting'], f1_scores['Gradient Boosting'], r2_scores['Gradient Boosting'], mae_scores['Gradient Boosting']]
+        'Precision': precision_scores,
+        'F1 Score': f1_scores
     })
 
-    metrics_df = metrics_df.transpose()
-    metrics_df.columns = metrics
-    st.write(metrics_df)
+    st.dataframe(metrics_df)
 
-    metrics_df.plot(kind='bar', figsize=(14, 8))
-    plt.title("Comparison of Model Metrics", fontsize=16)
-    plt.xlabel("Models", fontsize=14)
-    plt.ylabel("Metric Values", fontsize=14)
+    fig, ax = plt.subplots(figsize=(14, 8))
+    metrics_df.plot(kind='bar', ax=ax)
+    ax.set_title("Comparison of Model Metrics", fontsize=16)
+    ax.set_xlabel("Models", fontsize=14)
+    ax.set_ylabel("Metric Values", fontsize=14)
     plt.xticks(rotation=45, ha='right', fontsize=12)
-    plt.yticks(fontsize=12)
-    for p in plt.gca().patches:
-        plt.text(p.get_x() + p.get_width() / 2, p.get_height() + 0.06, f'{p.get_height():.3f}',
-                 ha='center', va='bottom', fontsize=10, color='black')
-    plt.tight_layout(pad=4.0)
-    st.pyplot()
+    st.pyplot(fig)
 
-        # --- 3rd Graph: Model Metrics Comparison ---
-        st.title("Model Performance Metrics Comparison")
-        st.subheader("Comparison of Precision, F1 Score, R² Score, and MAE")
+    # Display the best model
+    st.success(f"🎉 Best Model: {best_model_name} with Accuracy: {accuracies[best_model_name] * 100:.2f}%")
 
-        # Combine the metrics into a DataFrame for easy plotting
-        metrics_df = pd.DataFrame({
-            'Precision': list(precision_scores.values()),
-            'F1 Score': list(f1_scores.values()),
-            'R² Score': list(r2_scores.values()),
-            'MAE': list(mae_scores.values())
-        }, index=models)
-
-        # Display the DataFrame
-        st.write(metrics_df)
-
-        # Plot the metrics comparison as a bar graph
-        metrics_df.plot(kind='bar', figsize=(14, 8))
-
-        # Set the chart title and axis labels
-        plt.title("Comparison of Model Metrics (Precision, F1 Score, R² Score, MAE)", fontsize=16)
-        plt.xlabel("Models", fontsize=14)
-        plt.ylabel("Metric Values", fontsize=14)
-        plt.xticks(rotation=45, ha='right', fontsize=12)
-        plt.yticks(fontsize=12)
-
-        # Show the plot with values above the bars
-        for p in plt.gca().patches:
-            plt.text(p.get_x() + p.get_width() / 2, p.get_height() + 0.06, f'{p.get_height():.3f}',
-                     ha='center', va='bottom', fontsize=10, color='black')
-
-        # Adjust the layout for better display
-        plt.tight_layout(pad=4.0)
-
-        # Display the plot
-        st.pyplot()
 
         # Save the best model
         joblib.dump(best_model, "best_model.pkl")
