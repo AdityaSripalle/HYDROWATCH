@@ -2,16 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.naive_bayes import GaussianNB
-from sklearn.linear_model import LogisticRegression  # Corrected import for Logistic Regression
-from sklearn.linear_model import SGDClassifier
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.metrics import accuracy_score
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, precision_score, f1_score, r2_score, mean_absolute_error
 from imblearn.over_sampling import SMOTE
 
 st.title("💧 Water Quality Prediction (Optimized)")
@@ -39,18 +38,19 @@ def load_data(uploaded_file):
         return df_cleaned, features, target, label_encoder
     return None, None, None, None
 
-# Train multiple models with cross-validation accuracy
+# Train and evaluate multiple models
 def train_models(X_train, y_train, X_test, y_test):
-    """Trains multiple models and selects the best one based on cross-validation accuracy."""
+    """Trains multiple models and selects the best one based on testing accuracy."""
     models = {
-        "Random Forest": RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=20,
-                                                min_samples_leaf=10, max_features='sqrt', random_state=42),
-        "SVM": SVC(kernel='rbf', C=1.0, probability=True, random_state=42),
+        'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
+        'SVM': SVC(kernel='rbf', C=1, random_state=42, probability=True),
+        'K-Nearest Neighbors': KNeighborsClassifier(n_neighbors=5, p=2, metric='minkowski'),
         'Decision Tree': DecisionTreeClassifier(criterion='gini', random_state=42),
-        "Gaussian Naive Bayes": GaussianNB(),
-        "Logistic Regression - Sklearn": LogisticRegression(max_iter=1000),  # Corrected Logistic Regression
-        "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, learning_rate='optimal', random_state=42),
-        'K-Nearest Neighbors': KNeighborsClassifier(n_neighbors=5, p=2, metric='minkowski')
+        'Logistic Regression': LogisticRegression(max_iter=1000),
+        'Gaussian Naive Bayes': GaussianNB(),
+        'Bagging': BaggingClassifier(estimator=DecisionTreeClassifier(), n_estimators=10, random_state=42),
+        'AdaBoost': AdaBoostClassifier(estimator=DecisionTreeClassifier(), n_estimators=10, random_state=42),
+        'Gradient Boosting': GradientBoostingClassifier(n_estimators=100, random_state=42)
     }
 
     best_model = None
@@ -59,24 +59,24 @@ def train_models(X_train, y_train, X_test, y_test):
 
     results = []
 
-    kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-
     for name, model in models.items():
-        # Cross-validation accuracy on train data
-        cv_accuracy = np.mean(cross_val_score(model, X_train, y_train, cv=kfold, scoring='accuracy'))
-        
-        model.fit(X_train, y_train)  # Train final model
-        y_pred = model.predict(X_test)
-        test_acc = accuracy_score(y_test, y_pred)  # Actual test accuracy
+        model.fit(X_train, y_train)
 
-        results.append([name, round(cv_accuracy, 4), round(test_acc, 4)])
+        # Calculate training and testing accuracies
+        y_train_pred = model.predict(X_train)
+        train_acc = accuracy_score(y_train, y_train_pred)
+
+        y_test_pred = model.predict(X_test)
+        test_acc = accuracy_score(y_test, y_test_pred)
+
+        results.append([name, round(train_acc, 4), round(test_acc, 4)])
 
         if test_acc > best_accuracy:
             best_accuracy = test_acc
             best_model = model
             best_model_name = name
 
-    results_df = pd.DataFrame(results, columns=["Model", "Cross-Validation Accuracy", "Testing Accuracy"])
+    results_df = pd.DataFrame(results, columns=["Model", "Training Accuracy", "Testing Accuracy"])
     return best_model, best_model_name, results_df
 
 if uploaded_file:
@@ -92,11 +92,11 @@ if uploaded_file:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        # Handle class imbalance using SMOTE **before splitting** (Prevents data leakage)
+        # Handle class imbalance using SMOTE before splitting (Prevents data leakage)
         smote = SMOTE(random_state=42)
         X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
 
-        # ** 70-30 Split (Balanced Data) **
+        # Split data into training and testing sets (70-30 split)
         X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
 
         # Train models and get the best one
