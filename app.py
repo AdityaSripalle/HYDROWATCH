@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
-from sklearn.neighbors import KNeighborsClassifier  # Correct import for KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
 
@@ -32,16 +32,14 @@ def load_data(uploaded_file):
         df_cleaned = df[features + [target]].copy()
         df_cleaned.fillna(df_cleaned.median(numeric_only=True), inplace=True)  # Handle missing values
 
-        # Encode target variable
         label_encoder = LabelEncoder()
         df_cleaned[target] = label_encoder.fit_transform(df_cleaned[target])
 
         return df_cleaned, features, target, label_encoder
     return None, None, None, None
 
-# Train and evaluate models
 def train_and_evaluate_models(X_train, y_train, X_test, y_test):
-    """Trains multiple models and selects the best one based on testing accuracy."""
+    """Trains multiple models and selects the best one based on cross-validation accuracy and test accuracy."""
     models = {
         'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
         'SVM': SVC(kernel='rbf', C=1, random_state=42, probability=True),
@@ -57,26 +55,23 @@ def train_and_evaluate_models(X_train, y_train, X_test, y_test):
     accuracies = {}
     cv_accuracies = {}
 
-    # Train and evaluate all models
+    # Initialize Stratified K-Fold for cross-validation
+    stratified_kfold = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
     for name, model in models.items():
         # Perform cross-validation to get more generalized accuracy
-        cv_score = cross_val_score(model, X_train, y_train, cv=5, scoring='accuracy')  # 5-fold CV
-        cv_accuracies[name] = cv_score.mean()
+        cv_score = cross_val_score(model, X_train, y_train, cv=stratified_kfold, scoring='accuracy')
+        cv_accuracies[name] = round(cv_score.mean(), 4)  # Mean cross-validation accuracy
 
-        # Fit the model to the entire training data
+        # Fit the model on the training data
         model.fit(X_train, y_train)
         y_pred = model.predict(X_test)
 
-        accuracies[name] = accuracy_score(y_test, y_pred)  # Testing accuracy
+        # Compute test accuracy
+        accuracies[name] = round(accuracy_score(y_test, y_pred), 4)
 
-    # Ensuring cross-validation accuracy is always less than or equal to testing accuracy
-    for name in accuracies:
-        if cv_accuracies[name] > accuracies[name]:
-            st.warning(f"⚠️ Cross-validation accuracy for {name} is greater than testing accuracy. Adjusting the results.")
-            cv_accuracies[name] = accuracies[name]  # Adjust cross-validation accuracy to match testing accuracy
-
-    # Find the best model based on accuracy
-    best_model_name = max(accuracies, key=accuracies.get)
+    # Find the best model based on highest **cross-validation accuracy**
+    best_model_name = max(cv_accuracies, key=cv_accuracies.get)
     return models[best_model_name], best_model_name, accuracies, cv_accuracies
 
 if uploaded_file:
@@ -92,27 +87,26 @@ if uploaded_file:
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
 
-        # Handle class imbalance using SMOTE before splitting (Prevents data leakage)
+        # Handle class imbalance using SMOTE **before splitting** (Prevents data leakage)
         smote = SMOTE(random_state=42)
         X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
 
-        # Split data into training and testing sets (80-20 split)
+        # ** 80-20 Split (Balanced Data) **
         X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
 
         # Train models and get the best one
         best_model, best_model_name, accuracies, cv_accuracies = train_and_evaluate_models(X_train, y_train, X_test, y_test)
 
-        # Display Model Performance Comparison
+        # Display Model Performance
         st.write("### 🔥 Model Performance Comparison")
         comparison_df = pd.DataFrame({
             "Model": list(accuracies.keys()),
             "Cross-Validation Accuracy": list(cv_accuracies.values()),
             "Testing Accuracy": list(accuracies.values())
         })
+        st.dataframe(comparison_df)
 
-        st.write(comparison_df)
-
-        st.write(f"✅ **Best Model Selected:** {best_model_name}")
+        st.write(f"✅ **Best Model Selected (Based on Cross-Validation Accuracy):** {best_model_name}")
 
         # Save the best model
         joblib.dump(best_model, "best_model.pkl")
