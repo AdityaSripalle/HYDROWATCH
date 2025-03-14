@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split, cross_val_score
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
@@ -12,10 +12,8 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
 
-# Streamlit App Title
 st.title("💧 Water Quality Classification (Optimized)")
 
-# File uploader
 uploaded_file = st.file_uploader("📂 Upload CSV file", type=["csv"])
 
 @st.cache_data
@@ -39,13 +37,13 @@ def load_data(uploaded_file):
         return df_cleaned, features, target, label_encoder
     return None, None, None, None
 
-# Train multiple models and select the best one
+# Train multiple models with overfitting prevention
 def train_models(X_train, y_train, X_test, y_test):
     """Trains multiple models and selects the best one based on accuracy."""
     models = {
-        "Random Forest": RandomForestClassifier(random_state=42),
+        "Random Forest": RandomForestClassifier(n_estimators=100, max_depth=10, min_samples_split=5, min_samples_leaf=2, random_state=42),
         "SVM": SVC(kernel='rbf', probability=True, random_state=42),
-        "Decision Tree": DecisionTreeClassifier(random_state=42),
+        "Decision Tree": DecisionTreeClassifier(max_depth=10, min_samples_split=5, min_samples_leaf=2, random_state=42),
         "Naïve Bayes": GaussianNB(),
         "Logistic Regression": LogisticRegression(max_iter=500, random_state=42),
         "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, random_state=42)
@@ -61,9 +59,9 @@ def train_models(X_train, y_train, X_test, y_test):
         model.fit(X_train, y_train)
         train_acc = accuracy_score(y_train, model.predict(X_train))
         test_acc = accuracy_score(y_test, model.predict(X_test))
-        
+
         results.append([name, train_acc, test_acc])
-        
+
         if test_acc > best_accuracy:
             best_accuracy = test_acc
             best_model = model
@@ -115,9 +113,8 @@ if uploaded_file:
         if submit_button:
             input_scaled = scaler.transform([user_inputs])
             prediction = best_model.predict(input_scaled)
-            predicted_label = label_encoder.inverse_transform(prediction)[0]  # Correct decoding of prediction
+            predicted_label = label_encoder.inverse_transform(prediction)[0]
 
-            # Define water quality meaning
             water_quality_mapping = {
                 "Drinking Water": "✅ Safe for Drinking",
                 "Irrigation": "🌾 Suitable for Irrigation",
@@ -125,8 +122,6 @@ if uploaded_file:
                 "Harmful": "⚠️ Not Safe for Drinking"
             }
 
-            # Get meaningful output
             result_text = water_quality_mapping.get(predicted_label, "⚠️ Unknown Classification")
 
-            # Display result
             st.success(f"🔍 **Prediction:** {predicted_label} - {result_text}")
