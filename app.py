@@ -8,7 +8,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.linear_model import LogisticRegression  # Corrected import for Logistic Regression
+from sklearn.linear_model import SGDClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
@@ -47,9 +48,9 @@ def train_models(X_train, y_train, X_test, y_test):
         "SVM": SVC(kernel='rbf', C=1.0, probability=True, random_state=42),
         'Decision Tree': DecisionTreeClassifier(criterion='gini', random_state=42),
         "Gaussian Naive Bayes": GaussianNB(),
-        "Logistic Regression - Sklearn": SklearnLR(max_iter=1000),  # Sklearn Logistic Regression
+        "Logistic Regression - Sklearn": LogisticRegression(max_iter=1000),  # Corrected Logistic Regression
         "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, learning_rate='optimal', random_state=42),
-         'K-Nearest Neighbors': KNeighborsClassifier(n_neighbors=5, p=2, metric='minkowski')
+        'K-Nearest Neighbors': KNeighborsClassifier(n_neighbors=5, p=2, metric='minkowski')
     }
 
     best_model = None
