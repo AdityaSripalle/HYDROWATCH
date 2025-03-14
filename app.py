@@ -9,6 +9,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier  # Correct import for KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
 
