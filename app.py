@@ -1,142 +1,187 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import matplotlib.pyplot as plt
-from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
+import seaborn as sns
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
-from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoostClassifier, GradientBoostingClassifier
-from sklearn.svm import SVC
-from sklearn.tree import DecisionTreeClassifier
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.svm import SVC
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, precision_score, f1_score, mean_absolute_error, r2_score
-from imblearn.over_sampling import SMOTE
+import xgboost as xgb
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis
+from sklearn.metrics import confusion_matrix, classification_report
 
-# Streamlit App Title with Themed Styling
+# Streamlit App Configuration
 st.set_page_config(page_title="Water Quality Prediction", page_icon="💧", layout="wide")
-st.markdown("""
-    <style>
-    body {background-color: #f4f4f4; color: black;}
-    .stTitle {color: black;}
-    .stSidebar {background-color: #2E4053; color: white;}
-    .stDataframe {background-color: white; color: black;}
-    </style>
-""", unsafe_allow_html=True)
-
 st.title("💧 Water Quality Prediction")
 
-# Upload CSV file
+# Upload CSV File
 uploaded_file = st.file_uploader("📂 Upload CSV file", type=["csv"])
 
 def load_data(uploaded_file):
-    """Loads and processes the dataset."""
+    """Loads and preprocesses the dataset."""
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         features = ['pH', 'EC', 'CO3', 'HCO3', 'Cl', 'SO4', 'NO3', 'TH', 'Ca', 'Mg', 'Na', 'K', 'F', 'TDS', 'WQI']
         target = 'Water Quality Classification'
-
+        
         if target not in df.columns:
             st.error("❌ Error: The dataset does not contain the expected target column.")
             return None, None, None, None
-
+        
         df_cleaned = df[features + [target]].copy()
         df_cleaned.fillna(df_cleaned.median(numeric_only=True), inplace=True)
-
+        
         label_encoder = LabelEncoder()
         df_cleaned[target] = label_encoder.fit_transform(df_cleaned[target])
-
+        
         return df_cleaned, features, target, label_encoder
     else:
         return None, None, None, None
 
-# Data Review Section
-def data_review(df_cleaned):
-    """Displays dataset overview."""
-    st.subheader("📊 Data Review")
-    st.write("First 5 rows of the dataset:")
-    st.dataframe(df_cleaned.head())
-    
-    st.write("Dataset Information:")
-    st.text(df_cleaned.info())
-
-# Load the data
-df_cleaned, features, target, label_encoder = load_data(uploaded_file)
-if df_cleaned is not None:
-    data_review(df_cleaned)
-    
-    X = df_cleaned[features]
-    y = df_cleaned[target]
-
-    # Handle class imbalance using SMOTE
-    smote = SMOTE(random_state=42)
-    X_resampled, y_resampled = smote.fit_resample(X, y)
-
-    # Split the data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
-
-    # Scale the data
-    scaler = StandardScaler()
-    X_train = scaler.fit_transform(X_train)
-    X_test = scaler.transform(X_test)
-
-    def train_and_evaluate_models(X_train, y_train, X_test, y_test):
-        """Trains multiple models and selects the best one based on testing accuracy."""
+# Display Data Overview
+st.subheader("📊 Data Review")
+if uploaded_file:
+    df_cleaned, features, target, label_encoder = load_data(uploaded_file)
+    if df_cleaned is not None:
+        st.write(df_cleaned.head())
+        
+        X = df_cleaned[features]
+        y = df_cleaned[target]
+        
+        # Split data
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        
+        # Scale data
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+        
+        # Define models
         models = {
-            'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
-            'SVM': SVC(kernel='rbf', C=1, random_state=42, probability=True),
+            'Random Forest': RandomForestClassifier(n_estimators=100, max_depth=5, min_samples_split=10, min_samples_leaf=4, random_state=42),
+            'Naive Bayes': GaussianNB(),
             'K-Nearest Neighbors': KNeighborsClassifier(n_neighbors=5),
-            'Decision Tree': DecisionTreeClassifier(random_state=42),
-            'Logistic Regression': LogisticRegression(max_iter=1000),
-            'Gaussian Naive Bayes': GaussianNB(),
-            'Bagging': BaggingClassifier(DecisionTreeClassifier(), n_estimators=10, random_state=42),
-            'AdaBoost': AdaBoostClassifier(n_estimators=10, random_state=42),
-            'Gradient Boosting': GradientBoostingClassifier(n_estimators=100, random_state=42)
+            'Support Vector Machine': SVC(kernel='linear', random_state=42),
+            'Logistic Regression': LogisticRegression(random_state=42, max_iter=200),
+            'XGBoost': xgb.XGBClassifier(n_estimators=50, max_depth=3, learning_rate=0.1, objective='multi:softmax', num_class=3, random_state=42),
+            'Quadratic Discriminant Analysis': QuadraticDiscriminantAnalysis()  # Adding QDA model
         }
+        
+        # Dictionary to store results
+        results = {}
 
-        accuracies = {}
-        cv_accuracies = {}
-        precision_scores = {}
-        f1_scores = {}
-        r2_scores = {}
-        mae_scores = {}
-
+        # Train each model, calculate accuracy, and store the results
         for name, model in models.items():
             model.fit(X_train, y_train)
-            y_pred = model.predict(X_test)
+            y_train_pred = model.predict(X_train)
+            y_test_pred = model.predict(X_test)
             
-            accuracies[name] = accuracy_score(y_test, y_pred)
-            cv_accuracies[name] = np.mean(cross_val_score(model, X_train, y_train, cv=5))
-            precision_scores[name] = precision_score(y_test, y_pred, average='weighted', zero_division=0)
-            f1_scores[name] = f1_score(y_test, y_pred, average='weighted')
-            r2_scores[name] = r2_score(y_test, y_pred)
-            mae_scores[name] = mean_absolute_error(y_test, y_pred)
+            # Calculate training and testing accuracy
+            training_accuracy = accuracy_score(y_train, y_train_pred)
+            testing_accuracy = accuracy_score(y_test, y_test_pred)
+            
+            try:
+                precision = precision_score(y_test, y_test_pred, average='weighted', zero_division=0)
+            except ValueError:
+                precision = 0.0  # In case there's an error calculating precision (e.g., no positive class)
+            
+            results[name] = {
+                'Training Accuracy': training_accuracy,
+                'Testing Accuracy': testing_accuracy,
+                'Precision': precision,
+                'F1 Score': f1_score(y_test, y_test_pred, average='weighted'),
+                'R2 Score': r2_score(y_test, y_test_pred),
+                'MAE': mean_absolute_error(y_test, y_test_pred)
+            }
+        
+        # Convert results to DataFrame
+        results_df = pd.DataFrame(results).T
+        st.subheader("📊 Model Performance Table")
+        st.dataframe(results_df)
+        
+        # Determine the best model based on testing accuracy
+        best_model_name = results_df['Testing Accuracy'].idxmax()
+        st.write(f"🏆 Best Model: {best_model_name}")
 
-        best_model_name = max(accuracies, key=accuracies.get)
-        return models[best_model_name], best_model_name, accuracies, cv_accuracies, precision_scores, f1_scores, r2_scores, mae_scores
+        # Visualization - Model Comparison
+        st.subheader("📈 Model Performance Metrics")
+        metrics = ['Precision', 'F1 Score', 'R2 Score', 'MAE']
+        
+        for metric in metrics:
+            fig, ax = plt.subplots()
+            sns.barplot(x=results_df.index, y=results_df[metric], palette='coolwarm', ax=ax)
+            plt.xticks(rotation=45)
+            plt.ylabel(metric)
+            plt.title(f"{metric} Comparison Across Models")
+            for i, v in enumerate(results_df[metric]):
+                ax.text(i, v + 0.01, f"{v:.2f}", ha='center', fontsize=10)
+            st.pyplot(fig)
+        
+        # Training Accuracy vs Testing Accuracy (Including QDA)
+        st.subheader("📈 Training Accuracy vs Testing Accuracy")
+        fig, ax = plt.subplots()
+        results_df[['Training Accuracy', 'Testing Accuracy']].plot(kind='bar', ax=ax, figsize=(10, 5), colormap='coolwarm')
+        plt.xticks(rotation=45)
+        plt.ylabel("Accuracy")
+        plt.title("Training Accuracy vs Testing Accuracy for Different Models")
+        plt.legend()
+        st.pyplot(fig)
+        
+        # Quadratic Discriminant Analysis (QDA) Performance
+        st.write("QDA Classification Report:")
+        qda_model = models['Quadratic Discriminant Analysis']
+        y_test_pred_qda = qda_model.predict(X_test)
+        st.text(classification_report(y_test, y_test_pred_qda))
+        
+        # Confusion Matrix for QDA
+        cm_qda = confusion_matrix(y_test, y_test_pred_qda)
+        fig, ax = plt.subplots(figsize=(6, 6))
+        sns.heatmap(cm_qda, annot=True, fmt='g', cmap='Blues', xticklabels=label_encoder.classes_, yticklabels=label_encoder.classes_)
+        plt.title('Quadratic Discriminant Analysis (QDA) Confusion Matrix')
+        plt.ylabel('True Label')
+        plt.xlabel('Predicted Label')
+        st.pyplot(fig)
 
-    best_model, best_model_name, accuracies, cv_accuracies, precision_scores, f1_scores, r2_scores, mae_scores = train_and_evaluate_models(X_train, y_train, X_test, y_test)
+        # Prediction Interface (Form for input)
+        st.subheader("🔮 Predict Water Quality")
+        
+        # Create a form to handle user inputs
+        with st.form(key='prediction_form'):
+            # Input fields for each feature
+            user_inputs = [st.number_input(f"{feature}", value=0.0) for feature in features]
+            
+            # Submit button to trigger prediction
+            submit_button = st.form_submit_button(label="Predict")
+            
+            if submit_button:
+                # Only predict if the button is clicked
+                input_scaled = scaler.transform([user_inputs])
+                best_model = models[best_model_name]
+                prediction = best_model.predict(input_scaled)
+                predicted_label = label_encoder.inverse_transform(prediction)[0]
+                st.success(f"🔍 Predicted Water Quality: {predicted_label}")
+                
+                # Classifying based on WQI (assuming WQI is the last input field)
+                if user_inputs[-1] is not None:  # Make sure WQI is entered
+                    wqi_value = user_inputs[-1]  # Assuming WQI is the last input field
+                    quality, drinking, irrigation = classify_water_quality(wqi_value)
+                    st.info(f"🌊 Water Quality: {quality}\n🥤 Drinking Suitability: {drinking}\n🌱 Irrigation Suitability: {irrigation}")
+                else:
+                    st.error("❌ WQI value is required for classification.")
 
-    # Graphs and Metrics Display
-    st.subheader("📈 Model Performance Comparison")
-    metrics_df = pd.DataFrame({
-        'Accuracy': accuracies,
-        'Cross-Validation Accuracy': cv_accuracies,
-        'Precision': precision_scores,
-        'F1 Score': f1_scores,
-        'R2 Score': r2_scores,
-        'Mean Absolute Error': mae_scores
-    })
-
-    st.bar_chart(metrics_df)
-    st.dataframe(metrics_df)
-
-    st.subheader("🔮 Predict Water Quality")
-    user_inputs = [st.number_input(f"{feature}", value=0.0) for feature in features]
-    if st.button("Predict"):
-        input_scaled = scaler.transform([user_inputs])
-        prediction = best_model.predict(input_scaled)
-        predicted_label = label_encoder.inverse_transform(prediction)[0]
-
-        st.success(f"🔍 Predicted Water Quality: {predicted_label}")
+def classify_water_quality(wqi):
+    if wqi <= 25:
+        return "Very Poor", "Not Suitable for Drinking", "Not Suitable for Irrigation"
+    elif 25 < wqi <= 50:
+        return "Poor", "Not Suitable for Drinking", "Not Suitable for Irrigation"
+    elif 50 < wqi <= 75:
+        return "Fair", "Possibly Suitable for Drinking", "Possibly Suitable for Irrigation"
+    elif 75 < wqi <= 90:
+        return "Good", "Suitable for Drinking", "Suitable for Irrigation"
+    else:
+        return "Excellent", "Suitable for Drinking", "Suitable for Irrigation"
