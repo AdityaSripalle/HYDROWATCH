@@ -12,7 +12,7 @@ from sklearn.linear_model import LogisticRegression, SGDClassifier
 from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
 
-st.title("💧 Water Quality Classification (Optimized)")
+st.title("💧 Water Quality Prediction (Optimized)")
 
 uploaded_file = st.file_uploader("📂 Upload CSV file", type=["csv"])
 
@@ -41,11 +41,11 @@ def load_data(uploaded_file):
 def train_models(X_train, y_train, X_test, y_test):
     """Trains multiple models and selects the best one based on accuracy using cross-validation."""
     models = {
-        "Random Forest": RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=10, 
-                                                min_samples_leaf=5, max_features='sqrt', random_state=42),
+        "Random Forest": RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=15, 
+                                                min_samples_leaf=10, max_features='sqrt', random_state=42),
         "SVM": SVC(kernel='rbf', probability=True, random_state=42),
-        "Decision Tree": DecisionTreeClassifier(max_depth=10, min_samples_split=10, 
-                                                min_samples_leaf=5, random_state=42),
+        "Decision Tree": DecisionTreeClassifier(max_depth=8, min_samples_split=15, 
+                                                min_samples_leaf=10, random_state=42),
         "Naïve Bayes": GaussianNB(),
         "Logistic Regression": LogisticRegression(max_iter=500, random_state=42),
         "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, random_state=42)
@@ -91,6 +91,7 @@ if uploaded_file:
         smote = SMOTE(random_state=42)
         X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
 
+        # ** 70-30 Split (Fixed Overfitting Issue) **
         X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
 
         # Train models and get the best one
