@@ -9,6 +9,7 @@ from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
 
@@ -41,14 +42,15 @@ def load_data(uploaded_file):
 def train_models(X_train, y_train, X_test, y_test):
     """Trains multiple models and selects the best one based on accuracy using cross-validation."""
     models = {
-        "Random Forest": RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=15, 
+        "Random Forest": RandomForestClassifier(n_estimators=50, max_depth=10, min_samples_split=20,
                                                 min_samples_leaf=10, max_features='sqrt', random_state=42),
         "SVM": SVC(kernel='rbf', probability=True, random_state=42),
-        "Decision Tree": DecisionTreeClassifier(max_depth=8, min_samples_split=15, 
+        "Decision Tree": DecisionTreeClassifier(max_depth=6, min_samples_split=20,
                                                 min_samples_leaf=10, random_state=42),
         "Naïve Bayes": GaussianNB(),
         "Logistic Regression": LogisticRegression(max_iter=500, random_state=42),
-        "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, random_state=42)
+        "SGD Classifier": SGDClassifier(loss="log_loss", max_iter=1000, random_state=42),
+        "KNN": KNeighborsClassifier(n_neighbors=5, weights='distance')
     }
 
     best_model = None
