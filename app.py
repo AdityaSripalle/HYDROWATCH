@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import joblib
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.ensemble import RandomForestClassifier, BaggingClassifier, AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.svm import SVC
@@ -10,7 +10,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import GaussianNB
-from sklearn.metrics import accuracy_score, precision_score, f1_score, r2_score, mean_absolute_error
+from sklearn.metrics import accuracy_score
 from imblearn.over_sampling import SMOTE
 
 st.title("💧 Water Quality Prediction (Optimized)")
@@ -38,8 +38,8 @@ def load_data(uploaded_file):
         return df_cleaned, features, target, label_encoder
     return None, None, None, None
 
-# Train and evaluate multiple models
-def train_models(X_train, y_train, X_test, y_test):
+# Train and evaluate models
+def train_and_evaluate_models(X_train, y_train, X_test, y_test):
     """Trains multiple models and selects the best one based on testing accuracy."""
     models = {
         'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
@@ -53,31 +53,24 @@ def train_models(X_train, y_train, X_test, y_test):
         'Gradient Boosting': GradientBoostingClassifier(n_estimators=100, random_state=42)
     }
 
-    best_model = None
-    best_accuracy = 0
-    best_model_name = ""
+    accuracies = {}
+    cv_accuracies = {}
 
-    results = []
-
+    # Train and evaluate all models
     for name, model in models.items():
+        # Perform cross-validation to get more generalized accuracy
+        cv_score = cross_val_score(model, X_train, y_train, cv=5, scoring='accuracy')  # 5-fold CV
+        cv_accuracies[name] = cv_score.mean()
+
+        # Fit the model to the entire training data
         model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
 
-        # Calculate training and testing accuracies
-        y_train_pred = model.predict(X_train)
-        train_acc = accuracy_score(y_train, y_train_pred)
+        accuracies[name] = accuracy_score(y_test, y_pred)  # Testing accuracy
 
-        y_test_pred = model.predict(X_test)
-        test_acc = accuracy_score(y_test, y_test_pred)
-
-        results.append([name, round(train_acc, 4), round(test_acc, 4)])
-
-        if test_acc > best_accuracy:
-            best_accuracy = test_acc
-            best_model = model
-            best_model_name = name
-
-    results_df = pd.DataFrame(results, columns=["Model", "Training Accuracy", "Testing Accuracy"])
-    return best_model, best_model_name, results_df
+    # Find the best model based on accuracy
+    best_model_name = max(accuracies, key=accuracies.get)
+    return models[best_model_name], best_model_name, accuracies, cv_accuracies
 
 if uploaded_file:
     df, features, target, label_encoder = load_data(uploaded_file)
@@ -96,15 +89,18 @@ if uploaded_file:
         smote = SMOTE(random_state=42)
         X_resampled, y_resampled = smote.fit_resample(X_scaled, y)
 
-        # Split data into training and testing sets (70-30 split)
-        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
+        # Split data into training and testing sets (80-20 split)
+        X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
 
         # Train models and get the best one
-        best_model, best_model_name, results_df = train_models(X_train, y_train, X_test, y_test)
+        best_model, best_model_name, accuracies, cv_accuracies = train_and_evaluate_models(X_train, y_train, X_test, y_test)
 
         # Display Model Performance
         st.write("### 🔥 Model Performance")
-        st.dataframe(results_df)
+        st.write("#### Cross-Validation Accuracies")
+        st.write(pd.DataFrame(cv_accuracies.items(), columns=["Model", "CV Accuracy"]))
+        st.write("#### Testing Accuracies")
+        st.write(pd.DataFrame(accuracies.items(), columns=["Model", "Testing Accuracy"]))
 
         st.write(f"✅ **Best Model Selected:** {best_model_name}")
 
